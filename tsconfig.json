@@ -1,0 +1,13 @@
+{
+  "compilerOptions": {
+    "strict": true,
+    "moduleResolution": "bundler",
+    "esModuleInterop": true,
+    "module": "esnext",
+    "target": "esnext",
+    "jsx": "react-jsx",
+    "paths": {
+      "@/*": ["./src/*"]
+    }
+  }
+}
