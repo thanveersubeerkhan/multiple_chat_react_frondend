@@ -7,6 +7,6 @@ import Chat from './Chat'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App/>
+    <Chat/>
   </StrictMode>,
 )

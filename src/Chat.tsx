@@ -1,9 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from "react";
-import { Menu, X, Plus, Trash2, Sparkles, Send } from "lucide-react";
-import { Conversation } from "./components/ai-elements/conversation";
-import { Message, MessageContent, MessageAvatar } from "./components/ai-elements/message";
-import { PromptInput, PromptInputTextarea, PromptInputSubmit } from "./components/ai-elements/prompt-input";
-import { Response } from "./components/ai-elements/response";
+import { Send, Menu, X, Plus, Trash2, Sparkles, Zap, MessageCircle } from "lucide-react";
 
 // Types
 interface Chat {
@@ -13,7 +9,7 @@ interface Chat {
   updated_at: string;
 }
 
-interface MessageType {
+interface Message {
   id: string;
   role: "user" | "assistant";
   content: string;
@@ -52,10 +48,10 @@ const AI_ELEMENTS = [
   }
 ];
 
-export default function Chat() {
+export default function App() {
   const [chats, setChats] = useState<Chat[]>([]);
   const [currentChat, setCurrentChat] = useState<Chat | null>(null);
-  const [messages, setMessages] = useState<MessageType[]>([]);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isLoadingChats, setIsLoadingChats] = useState(false);
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
@@ -63,8 +59,16 @@ export default function Chat() {
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showAIElements, setShowAIElements] = useState(false);
-
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const conversationRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  // Auto-focus input when chat is selected
+  useEffect(() => {
+    if (currentChat && inputRef.current) {
+      inputRef.current.focus();
+    }
+  }, [currentChat]);
 
   // Scroll to bottom of messages
   useEffect(() => {
@@ -81,11 +85,9 @@ export default function Chat() {
       setIsLoadingChats(true);
       setError(null);
       const response = await fetch("http://localhost:3000/chats");
-
       if (!response.ok) {
         throw new Error(`Failed to fetch chats: ${response.status}`);
       }
-
       const chatsData = await response.json();
       setChats(chatsData);
     } catch (error) {
@@ -101,22 +103,18 @@ export default function Chat() {
       setIsLoadingMessages(true);
       setError(null);
       const response = await fetch(`http://localhost:3000/chats/${chatId}`);
-
       if (!response.ok) {
         throw new Error(`Failed to fetch chat: ${response.status}`);
       }
-
       const chatData = await response.json();
-
       setCurrentChat({
         id: chatData.id,
         title: chatData.title,
         created_at: chatData.created_at,
         updated_at: chatData.updated_at,
       });
-
       if (chatData.messages && chatData.messages.length > 0) {
-        const convertedMessages: MessageType[] = chatData.messages.map(
+        const convertedMessages: Message[] = chatData.messages.map(
           (msg: any) => ({
             id: msg.id.toString(),
             role: msg.role,
@@ -143,11 +141,9 @@ export default function Chat() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title: "New Chat" }),
       });
-
       if (!response.ok) {
         throw new Error(`Failed to create chat: ${response.status}`);
       }
-
       const newChat = await response.json();
       setCurrentChat(newChat);
       setMessages([]);
@@ -163,23 +159,19 @@ export default function Chat() {
   const deleteChat = useCallback(
     async (chatId: number, e: React.MouseEvent) => {
       e.stopPropagation();
-
       try {
         setError(null);
         const response = await fetch(`http://localhost:3000/chats/${chatId}`, {
           method: "DELETE",
         });
-
         if (!response.ok) {
           throw new Error(`Failed to delete chat: ${response.status}`);
         }
-
         if (currentChat && currentChat.id === chatId) {
           setCurrentChat(null);
           setMessages([]);
           setInput("");
         }
-
         fetchChats();
       } catch (error) {
         console.error("Error deleting chat:", error);
@@ -198,11 +190,9 @@ export default function Chat() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ title: newTitle }),
         });
-
         if (!response.ok) {
           throw new Error(`Failed to update chat title: ${response.status}`);
         }
-
         fetchChats();
       } catch (error) {
         console.error("Error updating chat title:", error);
@@ -215,23 +205,19 @@ export default function Chat() {
   const sendMessage = useCallback(
     async (message: string) => {
       if (!message.trim()) return;
-
       try {
         setIsStreaming(true);
         setError(null);
         setShowAIElements(false);
-
-        const userMessage: MessageType = {
+        const userMessage: Message = {
           id: Date.now().toString(),
           role: "user",
           content: message,
         };
         setMessages((prev) => [...prev, userMessage]);
-
         const apiUrl = currentChat
           ? `http://localhost:3000/chat/${currentChat.id}`
           : "http://localhost:3000/chat";
-
         const response = await fetch(apiUrl, {
           method: "POST",
           headers: {
@@ -246,19 +232,15 @@ export default function Chat() {
             ],
           }),
         });
-
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
-
         const reader = response.body?.getReader();
         if (!reader) {
           throw new Error("No response body");
         }
-
         let assistantMessage = "";
         const assistantMessageId = (Date.now() + 1).toString();
-
         setMessages((prev) => [
           ...prev,
           {
@@ -267,29 +249,22 @@ export default function Chat() {
             content: "",
           },
         ]);
-
         while (true) {
           const { done, value } = await reader.read();
-
           if (done) break;
-
           const chunk = new TextDecoder().decode(value);
           const lines = chunk.split("\n");
-
           for (const line of lines) {
             if (line.startsWith("data: ")) {
               const data = line.slice(6).trim();
-
               if (data === "[DONE]") {
                 break;
               }
-
               if (data) {
                 try {
                   const parsed = JSON.parse(data);
                   if (parsed.type === "text-delta" && parsed.textDelta) {
                     assistantMessage += parsed.textDelta;
-
                     setMessages((prev) =>
                       prev.map((msg) =>
                         msg.id === assistantMessageId
@@ -305,7 +280,6 @@ export default function Chat() {
             }
           }
         }
-
         await fetchChats();
       } catch (error) {
         console.error("Error sending message:", error);
@@ -318,21 +292,37 @@ export default function Chat() {
     [currentChat, fetchChats]
   );
 
-  const handleSubmit = useCallback(() => {
-    if (!input.trim() || isStreaming) return;
+  const handleSubmit = useCallback(
+    (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!input.trim() || isStreaming) return;
+      sendMessage(input);
+      setInput("");
+    },
+    [input, isStreaming, sendMessage]
+  );
 
-    sendMessage(input);
-    setInput("");
-  }, [input, isStreaming, sendMessage]);
+  const handleInputChange = useCallback(
+    (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+      setInput(e.target.value);
+    },
+    []
+  );
 
-  const handleInputChange = useCallback((value: string) => {
-    setInput(value);
-  }, []);
-
-  const handleAIPrompt = useCallback((prompt: string) => {
-    setShowAIElements(false);
-    sendMessage(prompt);
-  }, [sendMessage]);
+  const handleTextareaKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        handleSubmit(e);
+      }
+      const textarea = e.currentTarget;
+      setTimeout(() => {
+        textarea.style.height = "auto";
+        textarea.style.height = Math.min(textarea.scrollHeight, 100) + "px";
+      }, 0);
+    },
+    [handleSubmit]
+  );
 
   useEffect(() => {
     fetchChats();
@@ -343,21 +333,13 @@ export default function Chat() {
     const now: any = new Date();
     const diffTime = Math.abs(now - date);
     const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-
     if (diffDays === 0) return "Today";
     if (diffDays === 1) return "Yesterday";
     if (diffDays < 7) return `${diffDays}d ago`;
-
     return date.toLocaleDateString("en-US", {
       month: "short",
       day: "numeric",
     });
-  };
-
-  const getSubmitStatus = () => {
-    if (isStreaming) return 'streaming';
-    if (isLoadingMessages) return 'waiting';
-    return 'ready';
   };
 
   return (
@@ -378,7 +360,6 @@ export default function Chat() {
             <span>New Chat</span>
           </button>
         </div>
-
         {/* Chat List */}
         <div className="flex-1 overflow-y-auto">
           {isLoadingChats ? (
@@ -426,7 +407,6 @@ export default function Chat() {
             </div>
           )}
         </div>
-
         {/* Sidebar Footer */}
         <div className="p-4 border-t border-slate-700/30 bg-slate-900/50 space-y-3 flex-shrink-0">
           <div className="grid grid-cols-2 gap-2 text-xs">
@@ -440,14 +420,11 @@ export default function Chat() {
             </div>
           </div>
           <div className="flex items-center gap-2 text-xs text-slate-400">
-            <div className={`w-2 h-2 rounded-full ${
-              isStreaming ? 'bg-yellow-500' : 'bg-green-500'
-            }`}></div>
+            <div className="w-2 h-2 rounded-full bg-green-500"></div>
             <span>{isStreaming ? "Thinking..." : "Ready"}</span>
           </div>
         </div>
       </div>
-
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Header */}
@@ -459,9 +436,7 @@ export default function Chat() {
             >
               {isSidebarOpen ? <X size={20} /> : <Menu size={20} />}
             </button>
-
             <div className="h-8 w-px bg-slate-700/30"></div>
-
             {currentChat ? (
               <div className="flex items-center gap-2 min-w-0">
                 <div className="w-2.5 h-2.5 rounded-full bg-blue-500 flex-shrink-0"></div>
@@ -497,7 +472,6 @@ export default function Chat() {
               </div>
             )}
           </div>
-
           {error && (
             <div className="px-4 py-2 bg-red-500/20 border border-red-500/40 text-red-300 text-sm rounded-lg flex items-center gap-2 flex-shrink-0 ml-4">
               <span className="w-1.5 h-1.5 rounded-full bg-red-500"></span>
@@ -505,8 +479,7 @@ export default function Chat() {
             </div>
           )}
         </div>
-
-        {/* Chat Area using AI Elements Components */}
+        {/* Chat Area - Fixed Height with Scroll */}
         <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
           {isLoadingMessages ? (
             <div className="flex-1 flex items-center justify-center">
@@ -536,24 +509,40 @@ export default function Chat() {
               </div>
             </div>
           ) : (
-            <Conversation className="flex-1 overflow-y-auto p-6 space-y-6">
+            <div
+              ref={conversationRef}
+              className="flex-1 overflow-y-auto p-6 space-y-6"
+            >
+              {messages.length === 0 && currentChat && (
+                <div className="flex-1 flex items-center justify-center">
+                  <div className="text-center text-slate-400">
+                    <div className="text-2xl mb-4">💬</div>
+                    <div className="text-lg font-medium">Start a new conversation</div>
+                  </div>
+                </div>
+              )}
               {messages.map((msg) => (
-                <Message from={msg.role} key={msg.id}>
-                  <MessageAvatar
-                    name={msg.role === 'user' ? 'You' : 'AI'}
-                    src={
-                      msg.role === 'user'
-                        ? 'https://github.com/haydenbleasel.png'
-                        : 'https://github.com/openai.png'
-                    }
+                <div
+                  key={msg.id}
+                  className={`flex gap-4 ${
+                    msg.role === "user" ? "flex-row-reverse" : "flex-row"
+                  }`}
+                >
+                  <div
                     className={`w-10 h-10 rounded-xl flex items-center justify-center text-white text-sm font-semibold flex-shrink-0 ${
                       msg.role === "user"
                         ? "bg-gradient-to-br from-blue-500 to-blue-600 shadow-lg shadow-blue-500/30"
                         : "bg-gradient-to-br from-emerald-500 to-teal-600 shadow-lg shadow-emerald-500/30"
                     }`}
-                  />
-                  <MessageContent>
-                    <Response 
+                  >
+                    {msg.role === "user" ? "U" : "AI"}
+                  </div>
+                  <div
+                    className={`flex-1 max-w-2xl ${
+                      msg.role === "user" ? "text-right" : "text-left"
+                    }`}
+                  >
+                    <div
                       className={`inline-block px-5 py-3 rounded-2xl backdrop-blur-sm ${
                         msg.role === "user"
                           ? "bg-gradient-to-br from-blue-500 to-blue-600 text-white shadow-lg shadow-blue-500/20 rounded-br-none"
@@ -563,20 +552,17 @@ export default function Chat() {
                       <div className="whitespace-pre-wrap text-sm leading-relaxed break-words">
                         {msg.content}
                       </div>
-                    </Response>
-                  </MessageContent>
-                </Message>
+                    </div>
+                  </div>
+                </div>
               ))}
-
               {isStreaming && (
-                <Message from="assistant">
-                  <MessageAvatar
-                    name="AI"
-                    src="https://github.com/openai.png"
-                    className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white text-sm font-semibold flex-shrink-0 shadow-lg shadow-emerald-500/30"
-                  />
-                  <MessageContent>
-                    <Response className="inline-block px-5 py-3 rounded-2xl bg-gradient-to-br from-slate-700 to-slate-800 text-slate-100 shadow-lg shadow-slate-900/20 rounded-bl-none border border-slate-600/50">
+                <div className="flex gap-4">
+                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white text-sm font-semibold flex-shrink-0 shadow-lg shadow-emerald-500/30">
+                    AI
+                  </div>
+                  <div className="flex-1 max-w-2xl">
+                    <div className="inline-block px-5 py-3 rounded-2xl bg-gradient-to-br from-slate-700 to-slate-800 text-slate-100 shadow-lg shadow-slate-900/20 rounded-bl-none border border-slate-600/50">
                       <div className="flex items-center gap-2">
                         <div className="flex gap-1">
                           <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce"></div>
@@ -593,16 +579,14 @@ export default function Chat() {
                           Thinking...
                         </span>
                       </div>
-                    </Response>
-                  </MessageContent>
-                </Message>
+                    </div>
+                  </div>
+                </div>
               )}
-
               <div ref={messagesEndRef} />
-            </Conversation>
+            </div>
           )}
         </div>
-
         {/* AI Elements Quick Actions */}
         {!isStreaming && messages.length > 0 && (
           <div className="px-6 pb-3 flex-shrink-0">
@@ -618,7 +602,10 @@ export default function Chat() {
                 {AI_ELEMENTS.map((element, idx) => (
                   <button
                     key={idx}
-                    onClick={() => handleAIPrompt(element.prompt)}
+                    onClick={() => {
+                      setShowAIElements(false);
+                      sendMessage(element.prompt);
+                    }}
                     disabled={isStreaming}
                     className="p-3 rounded-lg bg-slate-700/30 hover:bg-slate-600/50 border border-slate-600/30 hover:border-blue-500/50 transition-all duration-200 text-left disabled:opacity-50 disabled:cursor-not-allowed group"
                   >
@@ -632,24 +619,45 @@ export default function Chat() {
             )}
           </div>
         )}
-
-        {/* Input Area using AI Elements Components */}
-        {messages.length > 0 && (
+        {/* Input Area - Fixed at Bottom */}
+        {currentChat && (
           <div className="border-t border-slate-700/30 bg-gradient-to-t from-slate-800/50 to-slate-800/30 backdrop-blur-xl p-6 flex-shrink-0">
-            <PromptInput onSubmit={handleSubmit} className="max-w-5xl">
-              <PromptInputTextarea
+            <div className="flex gap-3 max-w-5xl">
+              <textarea
+                ref={inputRef}
                 value={input}
                 onChange={handleInputChange}
+                onKeyDown={handleTextareaKeyDown}
                 placeholder="Ask me anything... (Shift+Enter for new line)"
                 disabled={isStreaming || isLoadingMessages}
                 className="flex-1 border border-slate-600/50 rounded-xl px-5 py-3 bg-slate-800/50 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500/50 focus:bg-slate-800/80 focus:ring-1 focus:ring-blue-500/20 resize-none disabled:bg-slate-900/50 disabled:cursor-not-allowed disabled:text-slate-500 transition-all duration-200"
+                rows={1}
+                style={{ minHeight: "48px", maxHeight: "100px" }}
               />
-              <PromptInputSubmit 
-                status={getSubmitStatus()}
+              <button
+                onClick={handleSubmit}
+                disabled={!input.trim() || isStreaming || isLoadingMessages}
                 className="bg-gradient-to-r from-blue-500 to-blue-600 text-white px-6 py-3 rounded-xl hover:from-blue-600 hover:to-blue-700 disabled:from-slate-600 disabled:to-slate-700 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center min-w-fit font-medium shadow-lg hover:shadow-blue-500/50 disabled:shadow-none flex-shrink-0"
-              />
-            </PromptInput>
-
+              >
+                {isStreaming ? (
+                  <div className="flex items-center gap-2">
+                    <div className="flex gap-1">
+                      <div className="w-1.5 h-1.5 bg-white rounded-full animate-bounce"></div>
+                      <div
+                        className="w-1.5 h-1.5 bg-white rounded-full animate-bounce"
+                        style={{ animationDelay: "0.1s" }}
+                      ></div>
+                      <div
+                        className="w-1.5 h-1.5 bg-white rounded-full animate-bounce"
+                        style={{ animationDelay: "0.2s" }}
+                      ></div>
+                    </div>
+                  </div>
+                ) : (
+                  <Send size={20} />
+                )}
+              </button>
+            </div>
             {/* Input Status */}
             <div className="mt-3 flex justify-between items-center text-xs text-slate-400 px-1">
               <span className="flex items-center gap-2">
